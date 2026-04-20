@@ -17,7 +17,7 @@ const filename = `screenshot-${next}${label}.png`;
 const outPath = path.join(outDir, filename);
 
 const browser = await puppeteer.launch({
-  executablePath: 'C:/Users/User/.cache/puppeteer/chrome/win64-147.0.7727.56/chrome-win64/chrome.exe',
+  executablePath: 'C:/Users/Sam/.cache/puppeteer/chrome-headless-shell/win64-147.0.7727.56/chrome-headless-shell-win64/chrome-headless-shell.exe',
   args: ['--no-sandbox'],
 });
 const page = await browser.newPage();

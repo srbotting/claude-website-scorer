@@ -3,47 +3,451 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title><!-- Page Title --></title>
-  <meta name="description" content="" />
+  <title>Website Scorer — Find the worst websites in any market</title>
+  <meta name="description" content="Discover the worst-performing local business websites by location and industry. Scored on performance, accessibility, best practices, SEO, and visual design." />
   <meta name="robots" content="index, follow" />
-  <link rel="canonical" href="" />
+  <link rel="canonical" href="/" />
 
-  <!-- Open Graph -->
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="" />
-  <meta property="og:title" content="" />
-  <meta property="og:description" content="" />
-  <meta property="og:image" content="https://placehold.co/1200x630" />
+  <meta property="og:type"        content="website" />
+  <meta property="og:title"       content="Website Scorer" />
+  <meta property="og:description" content="Find the worst websites in any market, ranked by performance, SEO, accessibility and design." />
+  <meta property="og:image"       content="https://placehold.co/1200x630" />
+  <meta property="og:url"         content="/" />
 
-  <!-- JSON-LD -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "WebPage",
-    "name": "",
-    "url": "",
-    "description": ""
+    "@type": "WebApplication",
+    "name": "Website Scorer",
+    "description": "Find the worst-performing local business websites by location and industry.",
+    "url": "/",
+    "applicationCategory": "BusinessApplication"
   }
   </script>
 
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Space Grotesk', 'sans-serif'],
+            body:    ['Inter', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              DEFAULT: '#00e0c6',
+              dim:     '#00b09f',
+              glow:    'rgba(0,224,198,0.15)',
+            },
+            surface: {
+              base:  '#07101f',
+              card:  '#0d1829',
+              raised:'#111f32',
+              border:'#1a2d44',
+            },
+          },
+        },
+      },
+    };
+  </script>
   <style>
-    /* Add custom styles here */
+    /* Grain texture overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #07101f;
+      color: #c8d8e8;
+      min-height: 100vh;
+    }
+
+    h1, h2, h3, label, th, .font-display {
+      font-family: 'Space Grotesk', sans-serif;
+    }
+
+    /* Radial glow behind hero */
+    .hero-glow {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 70% 50% at 50% -10%, rgba(0,224,198,0.12) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 30% at 80% 60%,  rgba(0,100,255,0.06) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    /* Card shadow */
+    .card-shadow {
+      box-shadow:
+        0 1px 0 0 rgba(255,255,255,0.04) inset,
+        0 4px 24px rgba(0,0,0,0.4),
+        0 1px 4px rgba(0,0,0,0.3);
+    }
+
+    /* Brand button */
+    .btn-brand {
+      background: linear-gradient(135deg, #00e0c6 0%, #00b09f 100%);
+      color: #07101f;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      transition: transform 150ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 150ms ease, opacity 150ms ease;
+      box-shadow: 0 0 0 0 rgba(0,224,198,0);
+    }
+    .btn-brand:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(0,224,198,0.3);
+    }
+    .btn-brand:active:not(:disabled) {
+      transform: translateY(0);
+    }
+    .btn-brand:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-brand:focus-visible {
+      outline: 2px solid #00e0c6;
+      outline-offset: 2px;
+    }
+
+    /* Inputs */
+    .field {
+      background: #0d1829;
+      border: 1px solid #1a2d44;
+      color: #c8d8e8;
+      height: 42px;
+      transition: border-color 150ms ease, box-shadow 150ms ease;
+    }
+    .field:focus {
+      outline: none;
+      border-color: #00e0c6;
+      box-shadow: 0 0 0 3px rgba(0,224,198,0.12);
+    }
+    .field::placeholder { color: #3d5470; }
+    .field option { background: #0d1829; }
+    select.field {
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237b9ab8' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 36px;
+    }
+
+    /* Score badge colours */
+    .score-bad    { color: #ff5555; }
+    .score-poor   { color: #ff9933; }
+    .score-ok     { color: #f5c518; }
+    .score-good   { color: #22c98a; }
+
+    /* Table */
+    .results-table th {
+      background: #0d1829;
+      color: #7b9ab8;
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .results-table tr:hover td { background: rgba(0,224,198,0.04); }
+    .results-table td { border-bottom: 1px solid #1a2d44; }
+
+    /* Spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(0,224,198,0.2);
+      border-top-color: #00e0c6;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+      display: inline-block;
+    }
+
+    /* Fade-in */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fadeUp 0.35s ease both; }
   </style>
 </head>
-<body>
+<body class="relative">
 
-  <nav>
-    <!-- Navigation -->
-  </nav>
+  <!-- Background glow -->
+  <div class="hero-glow"></div>
 
-  <main>
-    <!-- Page content -->
+  <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-12">
+
+    <!-- Header -->
+    <header class="mb-10 text-center">
+      <div class="inline-flex items-center gap-2 text-brand text-xs font-display font-semibold tracking-widest uppercase mb-4 opacity-80">
+        <span class="w-8 h-px bg-brand opacity-60"></span>
+        Website Intelligence
+        <span class="w-8 h-px bg-brand opacity-60"></span>
+      </div>
+      <h1 class="text-4xl sm:text-5xl font-display font-bold text-white tracking-tight" style="letter-spacing:-0.03em">
+        Website Scorer
+      </h1>
+      <p class="mt-3 text-base text-slate-400 max-w-lg mx-auto" style="line-height:1.7">
+        Find the worst-performing local business websites by location and industry — ranked by performance, SEO, accessibility and design.
+      </p>
+    </header>
+
+    <!-- Search form -->
+    <div class="card-shadow rounded-2xl border border-surface-border bg-surface-card p-6 sm:p-8 mb-8">
+      <form id="searchForm" class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto_auto] gap-4 items-end">
+
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-display font-semibold text-slate-400 tracking-wide uppercase">Location</label>
+          <input
+            id="location"
+            type="text"
+            placeholder="e.g. Dallas, United States"
+            class="field rounded-lg px-4 py-2.5 text-sm w-full"
+          />
+          <span class="text-xs text-slate-600">Leave blank to auto-detect</span>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-display font-semibold text-slate-400 tracking-wide uppercase">Industry</label>
+          <select id="industry" class="field rounded-lg px-4 py-2.5 text-sm w-full">
+            <option value="">All industries</option>
+          </select>
+          <span class="text-xs invisible select-none" aria-hidden="true">&#8203;</span>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-display font-semibold text-slate-400 tracking-wide uppercase">Results</label>
+          <input
+            id="limit"
+            type="number"
+            value="25"
+            min="1"
+            max="100"
+            class="field rounded-lg px-4 py-2.5 text-sm w-24"
+          />
+          <span class="text-xs invisible select-none" aria-hidden="true">&#8203;</span>
+        </div>
+
+        <button
+          type="submit"
+          id="submitBtn"
+          class="btn-brand rounded-lg px-6 py-2.5 text-sm h-[42px] self-end whitespace-nowrap"
+        >
+          Run Scan
+        </button>
+
+      </form>
+    </div>
+
+    <!-- Status / error -->
+    <div id="status" class="hidden mb-6"></div>
+
+    <!-- Results -->
+    <div id="results" class="hidden fade-up"></div>
+
   </main>
 
-  <footer>
-    <!-- Footer -->
+  <footer class="relative z-10 border-t border-surface-border mt-12 py-6 text-center text-xs text-slate-600">
+    Website Scorer — powered by OpenStreetMap, PageSpeed Insights &amp; Claude Vision
   </footer>
+
+  <script>
+    // ── Populate industry dropdown ───────────────────────────────────────────
+    fetch('/api/industries')
+      .then(r => r.json())
+      .then(industries => {
+        const sel = document.getElementById('industry');
+        industries.forEach(ind => {
+          const opt = document.createElement('option');
+          opt.value = ind;
+          opt.textContent = ind.charAt(0).toUpperCase() + ind.slice(1);
+          sel.appendChild(opt);
+        });
+      })
+      .catch(() => {}); // non-fatal
+
+    // ── Score colour helper ──────────────────────────────────────────────────
+    function scoreClass(n) {
+      if (n == null || n === '-') return 'text-slate-500';
+      if (n <= 30)  return 'score-bad';
+      if (n <= 50)  return 'score-poor';
+      if (n <= 70)  return 'score-ok';
+      return 'score-good';
+    }
+
+    function scoreBadge(n, bold = false) {
+      if (n == null) return `<span class="text-slate-600">—</span>`;
+      const cls = scoreClass(n) + (bold ? ' font-semibold font-display' : '');
+      return `<span class="${cls}">${n}</span>`;
+    }
+
+    // ── Elapsed timer ────────────────────────────────────────────────────────
+    let timerInterval = null;
+
+    function startTimer(el) {
+      const t0 = Date.now();
+      timerInterval = setInterval(() => {
+        const s = Math.floor((Date.now() - t0) / 1000);
+        const m = Math.floor(s / 60);
+        const sec = String(s % 60).padStart(2, '0');
+        el.textContent = m > 0 ? `${m}m ${sec}s` : `${s}s`;
+      }, 500);
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+
+    // ── Render results table ─────────────────────────────────────────────────
+    function renderResults(data) {
+      const { location, generatedAt, results } = data;
+      if (!results.length) {
+        return `<p class="text-slate-500 text-center py-8">No results returned.</p>`;
+      }
+
+      const date = new Date(generatedAt).toLocaleString();
+      const hasPuppeteer = results.some(r => r.scores.method === 'puppeteer');
+      const designIsHeuristic = results.some(r => r.scores.designMethod === 'heuristic');
+
+      const rows = results.map((r, i) => {
+        const s = r.scores;
+        const design = s.design != null
+          ? `${s.design}${s.designMethod === 'vision' ? '<span class="text-brand text-xs ml-0.5">✓</span>' : ''}`
+          : '—';
+        return `
+          <tr>
+            <td class="px-3 py-3 text-slate-500 text-sm font-display">${i + 1}</td>
+            <td class="px-3 py-3">
+              <div class="font-display font-medium text-white text-sm leading-tight">${esc(r.name)}</div>
+              <div class="text-xs text-slate-600 mt-0.5">${esc(r.address || '')}</div>
+            </td>
+            <td class="px-3 py-3 text-xs text-slate-400 capitalize">${esc(r.industry)}</td>
+            <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.performance)}</td>
+            <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.accessibility)}</td>
+            <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.bestPractices)}</td>
+            <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.seo)}</td>
+            <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.design)}</td>
+            <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.overall, true)}</td>
+            <td class="px-3 py-3 text-xs text-slate-500 max-w-[220px] truncate">
+              <a href="${esc(r.website)}" target="_blank" rel="noopener noreferrer"
+                 class="text-brand hover:underline transition-opacity hover:opacity-80"
+                 style="word-break:break-all">${esc(r.website.replace(/^https?:\/\//, ''))}</a>
+            </td>
+          </tr>`;
+      }).join('');
+
+      const notes = [];
+      if (hasPuppeteer)       notes.push('Technical scores use load-time + HTML heuristics (not full Lighthouse).');
+      if (designIsHeuristic)  notes.push('Design scores use CSS/DOM pattern analysis. Set <code class="text-brand text-xs">ANTHROPIC_API_KEY</code> for visual AI scoring.');
+
+      return `
+        <div class="flex items-baseline justify-between gap-4 mb-4 flex-wrap">
+          <h2 class="text-lg font-display font-semibold text-white">
+            ${results.length} results
+            <span class="text-slate-500 font-normal">· ${esc(location)}</span>
+          </h2>
+          <span class="text-xs text-slate-600">${date}</span>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-surface-border card-shadow">
+          <table class="results-table w-full text-left border-collapse text-sm">
+            <thead>
+              <tr>
+                <th class="px-3 py-3 rounded-tl-xl">#</th>
+                <th class="px-3 py-3">Business</th>
+                <th class="px-3 py-3">Industry</th>
+                <th class="px-3 py-3 text-center">Perf</th>
+                <th class="px-3 py-3 text-center">A11y</th>
+                <th class="px-3 py-3 text-center">BP</th>
+                <th class="px-3 py-3 text-center">SEO</th>
+                <th class="px-3 py-3 text-center">Design</th>
+                <th class="px-3 py-3 text-center">Score</th>
+                <th class="px-3 py-3 rounded-tr-xl">Website</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+
+        ${notes.length ? `
+          <div class="mt-4 flex flex-col gap-1">
+            ${notes.map(n => `<p class="text-xs text-slate-600">* ${n}</p>`).join('')}
+          </div>` : ''}`;
+    }
+
+    function esc(str) {
+      return String(str ?? '')
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    // ── Form submit ──────────────────────────────────────────────────────────
+    document.getElementById('searchForm').addEventListener('submit', async e => {
+      e.preventDefault();
+
+      const location = document.getElementById('location').value.trim();
+      const industry = document.getElementById('industry').value;
+      const limit    = document.getElementById('limit').value || '25';
+      const btn      = document.getElementById('submitBtn');
+      const statusEl = document.getElementById('status');
+      const resultsEl= document.getElementById('results');
+
+      const params = new URLSearchParams({ limit });
+      if (location) params.set('location', location);
+      if (industry) params.set('industry', industry);
+
+      // Loading state
+      btn.disabled = true;
+      resultsEl.classList.add('hidden');
+      statusEl.classList.remove('hidden');
+
+      const timerEl = document.createElement('span');
+      statusEl.innerHTML = '';
+      statusEl.className = 'flex items-center gap-3 text-sm text-slate-400 mb-6';
+      statusEl.appendChild(Object.assign(document.createElement('span'), { className: 'spinner' }));
+      statusEl.appendChild(document.createTextNode('Scanning websites\u2026 '));
+      statusEl.appendChild(timerEl);
+      startTimer(timerEl);
+
+      try {
+        const res  = await fetch(`/api/search?${params}`);
+        const data = await res.json();
+
+        stopTimer();
+
+        if (!res.ok) {
+          statusEl.innerHTML = `<span class="text-red-400 text-sm">⚠ ${esc(data.error ?? 'Request failed')}</span>`;
+          return;
+        }
+
+        statusEl.classList.add('hidden');
+        resultsEl.classList.remove('hidden');
+        resultsEl.className = 'fade-up';
+        resultsEl.innerHTML = renderResults(data);
+      } catch (err) {
+        stopTimer();
+        statusEl.innerHTML = `<span class="text-red-400 text-sm">⚠ ${esc(err.message)}</span>`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
 
 </body>
 </html>

@@ -774,7 +774,12 @@ async function main() {
   }
 }
 
-main().catch(e => {
-  console.error(`\nFatal: ${e.message}`);
-  process.exit(1);
-});
+// Run as CLI only when executed directly
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch(e => {
+    console.error(`\nFatal: ${e.message}`);
+    process.exit(1);
+  });
+}
+
+export { findBusinesses, scoreAll, detectLocation, ALL_INDUSTRIES };
