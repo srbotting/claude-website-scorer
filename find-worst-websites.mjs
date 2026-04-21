@@ -455,6 +455,10 @@ async function scorePuppeteer(url, browser, anthropicKey = null) {
     else req.continue();
   });
 
+  const jsErrors = [];
+  page.on('pageerror', () => jsErrors.push(1));
+  page.on('console', msg => { if (msg.type() === 'error') jsErrors.push(1); });
+
   let navOk = false;
   const t0 = Date.now();
   try {
@@ -495,10 +499,27 @@ async function scorePuppeteer(url, browser, anthropicKey = null) {
       return {
         wordCount,
         hasTitle:      !!document.title?.trim(),
+        titleLen:      (document.title ?? '').trim().length,
         hasMetaDesc:   !!document.querySelector('meta[name="description"]')?.content?.trim(),
+        metaDescLen:   (document.querySelector('meta[name="description"]')?.content ?? '').trim().length,
         hasViewport:   !!document.querySelector('meta[name="viewport"]'),
         hasCanonical:  !!document.querySelector('link[rel="canonical"]'),
+        h1Count:       document.querySelectorAll('h1').length,
         hasH1:         !!document.querySelector('h1'),
+        hasH2:         !!document.querySelector('h2'),
+        hasOgTitle:    !!document.querySelector('meta[property="og:title"]'),
+        hasOgDesc:     !!document.querySelector('meta[property="og:description"]'),
+        hasOgImage:    !!document.querySelector('meta[property="og:image"]')?.content?.trim(),
+        hasJsonLd:     !!document.querySelector('script[type="application/ld+json"]'),
+        isNoIndex:     /noindex/i.test(document.querySelector('meta[name="robots"]')?.content ?? ''),
+        headingHierarchyOk: (() => {
+          // Fail if any heading level is skipped (e.g. h1 → h3 with no h2)
+          const levels = [1,2,3,4].filter(n => document.querySelector(`h${n}`));
+          for (let i = 1; i < levels.length; i++) {
+            if (levels[i] - levels[i-1] > 1) return false;
+          }
+          return true;
+        })(),
         imgCount:      imgs.length,
         imgsWithAlt:   imgs.filter(i => i.getAttribute('alt') !== null).length,
         hasLang:       !!document.documentElement.lang,
@@ -545,6 +566,25 @@ async function scorePuppeteer(url, browser, anthropicKey = null) {
     return { performance: 0, accessibility: 0, bestPractices: 0, seo: 0, design: 0, overall: 0, method: 'puppeteer', designMethod: 'heuristic' };
   }
 
+  // Fetch sitemap.xml and robots.txt in parallel — short timeout, failures = absent
+  const origin = (() => { try { return new URL(url).origin; } catch { return null; } })();
+  let hasSitemap = false, robotsOk = true;
+  if (origin) {
+    const quickFetch = (u) => fetch(u, { signal: AbortSignal.timeout(5_000) }).then(r => r.ok ? r.text() : null).catch(() => null);
+    const [sitemapText, robotsText] = await Promise.all([
+      quickFetch(`${origin}/sitemap.xml`),
+      quickFetch(`${origin}/robots.txt`),
+    ]);
+    hasSitemap = !!sitemapText;
+    if (robotsText) {
+      // Fail only if there's a blanket Disallow: / with no Allow: / override
+      const lines = robotsText.split('\n').map(l => l.trim().toLowerCase());
+      const hasDisallowAll = lines.some(l => l === 'disallow: /');
+      const hasAllowAll    = lines.some(l => l === 'allow: /');
+      if (hasDisallowAll && !hasAllowAll) robotsOk = false;
+    }
+  }
+
   const isHttps = url.startsWith('https://');
 
   const perf =
@@ -553,22 +593,54 @@ async function scorePuppeteer(url, browser, anthropicKey = null) {
     loadMs < 5000 ? 50 :
     loadMs < 8000 ? 30 : 12;
 
-  const seo = Math.min(100,
-    (audit.hasTitle    ? 25 : 0) +
-    (audit.hasMetaDesc ? 25 : 0) +
-    (audit.hasViewport ? 25 : 0) +
-    (audit.hasCanonical? 15 : 0) +
-    (audit.hasH1       ? 10 : 0),
-  );
-
-  const altRatio   = audit.imgCount   > 0 ? audit.imgsWithAlt   / audit.imgCount   : 1;
-  const labelRatio = audit.inputCount > 0 ? audit.labeledInputs / audit.inputCount : 1;
-  const a11y = Math.min(100, Math.round(
-    (audit.hasLang ? 30 : 0) + altRatio * 45 + labelRatio * 25,
+  // Title: full credit for 5–65 chars, half credit for exists-but-wrong-length
+  const titleScore    = audit.hasTitle    ? (audit.titleLen    >= 5  && audit.titleLen    <= 65  ? 15 : 8) : 0;
+  // Meta desc: full credit for 50–160 chars, half credit for exists-but-wrong-length
+  const metaDescScore = audit.hasMetaDesc ? (audit.metaDescLen >= 50 && audit.metaDescLen <= 160 ? 15 : 8) : 0;
+  // H1: exactly one is ideal; multiple H1s is a mild penalty
+  const h1Score = audit.h1Count === 1 ? 10 : audit.h1Count > 1 ? 3 : 0;
+  // Alt text on images (also an SEO signal — search engines index image content)
+  const altSeoScore = audit.imgCount > 0 ? Math.round((audit.imgsWithAlt / audit.imgCount) * 8) : 0;
+  const seo = Math.max(0, Math.min(100,
+    titleScore +
+    metaDescScore +
+    (audit.hasViewport        ? 10 : 0) +
+    h1Score +
+    (audit.hasCanonical       ?  8 : 0) +
+    ((audit.hasOgTitle && audit.hasOgDesc && audit.hasOgImage) ? 8 : (audit.hasOgTitle && audit.hasOgDesc) ? 5 : 0) +
+    (audit.hasJsonLd          ?  8 : 0) +
+    (hasSitemap               ?  8 : 0) +
+    (robotsOk                 ?  6 : 0) +
+    (audit.wordCount >= 300   ?  6 : audit.wordCount >= 100 ? 3 : 0) +
+    (audit.headingHierarchyOk ?  4 : 0) +
+    altSeoScore +
+    (audit.isNoIndex          ? -30 : 0),
   ));
 
+  // A11y: only award image/input points when those elements actually exist —
+  // defaulting ratios to 1 when nothing is present handed out free points.
+  let a11y = 0;
+  if (audit.hasLang)            a11y += 20;
+  if (audit.hasViewport)        a11y += 10;
+  if (audit.hasH1)              a11y += 10;
+  if (!audit.design.hasMarquee) a11y += 10;
+  if (audit.imgCount   > 0) a11y += Math.round((audit.imgsWithAlt / audit.imgCount)   * 30);
+  if (audit.inputCount > 0) a11y += Math.round((audit.labeledInputs / audit.inputCount) * 20);
+  a11y = Math.min(100, a11y);
+
+  // BP: JS errors penalise up to 20 pts; legacy HTML penalises up to 15 pts.
+  const jsPenalty = Math.min(20, jsErrors.length * 7);
+  const legacyPenalty =
+    (audit.design.hasFrames  ? 6 : 0) +
+    (audit.design.hasMarquee ? 4 : 0) +
+    Math.min(3, audit.design.fontTags) +
+    Math.min(2, audit.design.centerTags);
   const bp = Math.min(100,
-    (isHttps ? 45 : 0) + (audit.hasFavicon ? 20 : 0) + (audit.hasDoctype ? 20 : 0) + 15,
+    (isHttps          ? 40 : 0) +
+    (audit.hasDoctype ? 15 : 0) +
+    (audit.hasFavicon ? 10 : 0) +
+    Math.max(0, 20 - jsPenalty) +
+    Math.max(0, 15 - legacyPenalty),
   );
 
   let design = computeDesignScore(audit.design);

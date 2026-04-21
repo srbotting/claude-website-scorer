@@ -161,10 +161,76 @@
       text-transform: uppercase;
       position: sticky;
       top: 0;
-      z-index: 1;
+      z-index: 2;
+      overflow: visible;
     }
     .results-table tr:hover td { background: rgba(0,224,198,0.04); }
     .results-table td { border-bottom: 1px solid #1a2d44; }
+
+    /* Tooltip */
+    .tip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .tip-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      border: 1px solid #3d5470;
+      color: #3d5470;
+      font-size: 8px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      letter-spacing: 0;
+      text-transform: none;
+      cursor: default;
+      flex-shrink: 0;
+      transition: border-color 120ms ease, color 120ms ease;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .tip:hover .tip-icon {
+      border-color: #7b9ab8;
+      color: #7b9ab8;
+    }
+    .tip-box {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #111f32;
+      border: 1px solid #1a2d44;
+      color: #c8d8e8;
+      font-size: 0.7rem;
+      font-family: 'Inter', sans-serif;
+      letter-spacing: 0;
+      text-transform: none;
+      font-weight: 400;
+      line-height: 1.5;
+      white-space: nowrap;
+      padding: 5px 9px;
+      border-radius: 6px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 120ms ease;
+      z-index: 20;
+    }
+    .tip-box::after {
+      content: '';
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-bottom-color: #1a2d44;
+    }
+    .tip:hover .tip-box { opacity: 1; }
 
     /* Spinner */
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -243,13 +309,17 @@
           <span class="text-xs invisible select-none" aria-hidden="true">&#8203;</span>
         </div>
 
-        <button
-          type="submit"
-          id="submitBtn"
-          class="btn-brand rounded-lg px-6 py-2.5 text-sm h-[42px] self-end whitespace-nowrap"
-        >
-          Run Scan
-        </button>
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs invisible select-none" aria-hidden="true">&#8203;</span>
+          <button
+            type="submit"
+            id="submitBtn"
+            class="btn-brand rounded-lg px-6 py-2.5 text-sm h-[42px] whitespace-nowrap"
+          >
+            Run Scan
+          </button>
+          <span class="text-xs invisible select-none" aria-hidden="true">&#8203;</span>
+        </div>
 
       </form>
     </div>
@@ -347,7 +417,7 @@
             <td class="px-3 py-3 text-xs text-slate-500 max-w-[220px] truncate">
               <a href="${esc(r.website)}" target="_blank" rel="noopener noreferrer"
                  class="text-brand hover:underline transition-opacity hover:opacity-80"
-                 style="word-break:break-all">${esc(r.website.replace(/^https?:\/\//, ''))}</a>
+                 style="word-break:break-all">${esc(r.website)}</a>
             </td>
           </tr>`;
       }).join('');
@@ -365,19 +435,19 @@
           <span class="text-xs text-slate-600">${date}</span>
         </div>
 
-        <div class="overflow-x-auto rounded-xl border border-surface-border card-shadow">
+        <div class="overflow-x-auto overflow-y-visible rounded-xl border border-surface-border card-shadow">
           <table class="results-table w-full text-left border-collapse text-sm">
             <thead>
               <tr>
                 <th class="px-3 py-3 rounded-tl-xl">#</th>
                 <th class="px-3 py-3">Business</th>
                 <th class="px-3 py-3">Industry</th>
-                <th class="px-3 py-3 text-center">Perf</th>
-                <th class="px-3 py-3 text-center">A11y</th>
-                <th class="px-3 py-3 text-center">BP</th>
-                <th class="px-3 py-3 text-center">SEO</th>
-                <th class="px-3 py-3 text-center">Design</th>
-                <th class="px-3 py-3 text-center">Score</th>
+                <th class="px-3 py-3 text-center"><span class="tip">Perf<span class="tip-icon">?</span><span class="tip-box">Page load speed &amp; Core Web Vitals</span></span></th>
+                <th class="px-3 py-3 text-center"><span class="tip">A11y<span class="tip-icon">?</span><span class="tip-box">Accessibility — contrast, labels, keyboard nav</span></span></th>
+                <th class="px-3 py-3 text-center"><span class="tip">BP<span class="tip-icon">?</span><span class="tip-box">Best Practices — HTTPS, no deprecated APIs, secure headers</span></span></th>
+                <th class="px-3 py-3 text-center"><span class="tip">SEO<span class="tip-icon">?</span><span class="tip-box">Search engine optimisation — meta tags, crawlability</span></span></th>
+                <th class="px-3 py-3 text-center"><span class="tip">Design<span class="tip-icon">?</span><span class="tip-box">Visual design quality — layout, fonts, responsiveness</span></span></th>
+                <th class="px-3 py-3 text-center"><span class="tip">Score<span class="tip-icon">?</span><span class="tip-box">Weighted overall score (lower = worse website)</span></span></th>
                 <th class="px-3 py-3 rounded-tr-xl">Website</th>
               </tr>
             </thead>
@@ -397,6 +467,32 @@
         .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
 
+    // ── LocalStorage persistence ─────────────────────────────────────────────
+    const STORAGE_KEY = 'websiteScorer_lastScan';
+
+    function saveToStorage(data) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+    }
+
+    function loadFromStorage() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { return null; }
+    }
+
+    function clearStorage() {
+      try { localStorage.removeItem(STORAGE_KEY); } catch {}
+    }
+
+    function showResults(data) {
+      const resultsEl = document.getElementById('results');
+      resultsEl.classList.remove('hidden');
+      resultsEl.className = 'fade-up';
+      resultsEl.innerHTML = renderResults(data);
+    }
+
+    // Restore last scan on page load
+    const saved = loadFromStorage();
+    if (saved) showResults(saved);
+
     // ── Form submit ──────────────────────────────────────────────────────────
     document.getElementById('searchForm').addEventListener('submit', async e => {
       e.preventDefault();
@@ -412,7 +508,8 @@
       if (location) params.set('location', location);
       if (industry) params.set('industry', industry);
 
-      // Loading state
+      // Clear cached results and show loading state
+      clearStorage();
       btn.disabled = true;
       resultsEl.classList.add('hidden');
       statusEl.classList.remove('hidden');
@@ -437,9 +534,8 @@
         }
 
         statusEl.classList.add('hidden');
-        resultsEl.classList.remove('hidden');
-        resultsEl.className = 'fade-up';
-        resultsEl.innerHTML = renderResults(data);
+        saveToStorage(data);
+        showResults(data);
       } catch (err) {
         stopTimer();
         statusEl.innerHTML = `<span class="text-red-400 text-sm">⚠ ${esc(err.message)}</span>`;
