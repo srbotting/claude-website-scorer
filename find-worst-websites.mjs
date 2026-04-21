@@ -685,10 +685,16 @@ async function scoreAll(businesses, psiApiKey, anthropicKey, limit, onResult = n
   const launchBrowser = async () => {
     if (browser) return;
     log('[Scoring] Launching Puppeteer...');
-    // Prefer full Chrome; fall back to chrome-headless-shell if full Chrome not downloaded
-    const defaultExe = puppeteer.executablePath();
-    const hsDir = defaultExe.replace(/chrome[/\\]win64/, 'chrome-headless-shell/win64').replace(/chrome-win64[/\\]chrome\.exe$/, 'chrome-headless-shell-win64/chrome-headless-shell.exe');
-    const executablePath = existsSync(defaultExe) ? defaultExe : (existsSync(hsDir) ? hsDir : undefined);
+    let executablePath;
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      // Explicit override — used in production where Playwright Chromium is pre-installed
+      executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    } else {
+      // Local dev: prefer full Chrome, fall back to chrome-headless-shell
+      const defaultExe = puppeteer.executablePath();
+      const hsDir = defaultExe.replace(/chrome[/\\]win64/, 'chrome-headless-shell/win64').replace(/chrome-win64[/\\]chrome\.exe$/, 'chrome-headless-shell-win64/chrome-headless-shell.exe');
+      executablePath = existsSync(defaultExe) ? defaultExe : (existsSync(hsDir) ? hsDir : undefined);
+    }
     browser = await puppeteer.launch({ headless: true, executablePath, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   };
 
