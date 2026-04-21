@@ -1,7 +1,7 @@
 {
-  "name": "website-stub",
+  "name": "website-scorer",
   "version": "1.0.0",
-  "description": "Frontend website starter template",
+  "description": "Find the worst-performing local business websites by location and industry",
   "license": "ISC",
   "dependencies": {
     "puppeteer": "^24.41.0"
