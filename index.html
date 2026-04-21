@@ -493,55 +493,153 @@
     const saved = loadFromStorage();
     if (saved) showResults(saved);
 
+    // ── Live table helpers ───────────────────────────────────────────────────
+    function buildLiveRow(r, i) {
+      const s = r.scores;
+      return `
+        <tr>
+          <td class="px-3 py-3 text-slate-500 text-sm font-display">${i}</td>
+          <td class="px-3 py-3">
+            <div class="font-display font-medium text-white text-sm leading-tight">${esc(r.name)}</div>
+            <div class="text-xs text-slate-600 mt-0.5">${esc(r.address || '')}</div>
+          </td>
+          <td class="px-3 py-3 text-xs text-slate-400 capitalize">${esc(r.industry)}</td>
+          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.performance)}</td>
+          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.accessibility)}</td>
+          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.bestPractices)}</td>
+          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.seo)}</td>
+          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.design)}</td>
+          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.overall, true)}</td>
+          <td class="px-3 py-3 text-xs text-slate-500 max-w-[220px] truncate">
+            <a href="${esc(r.website)}" target="_blank" rel="noopener noreferrer"
+               class="text-brand hover:underline transition-opacity hover:opacity-80"
+               style="word-break:break-all">${esc(r.website)}</a>
+          </td>
+        </tr>`;
+    }
+
+    function buildLiveShell(location, total) {
+      return `
+        <div class="flex items-baseline justify-between gap-4 mb-4 flex-wrap">
+          <h2 class="text-lg font-display font-semibold text-white">
+            <span id="liveCount">0</span> of ${total} scored
+            <span class="text-slate-500 font-normal">· ${esc(location)}</span>
+          </h2>
+          <span class="text-xs text-brand opacity-70">Results appear as each site is scored</span>
+        </div>
+        <div class="overflow-x-auto overflow-y-visible rounded-xl border border-surface-border card-shadow">
+          <table class="results-table w-full text-left border-collapse text-sm">
+            <thead>
+              <tr>
+                <th class="px-3 py-3 rounded-tl-xl">#</th>
+                <th class="px-3 py-3">Business</th>
+                <th class="px-3 py-3">Industry</th>
+                <th class="px-3 py-3 text-center"><span class="tip">Perf<span class="tip-icon">?</span><span class="tip-box">Page load speed &amp; Core Web Vitals</span></span></th>
+                <th class="px-3 py-3 text-center"><span class="tip">A11y<span class="tip-icon">?</span><span class="tip-box">Accessibility — contrast, labels, keyboard nav</span></span></th>
+                <th class="px-3 py-3 text-center"><span class="tip">BP<span class="tip-icon">?</span><span class="tip-box">Best Practices — HTTPS, no deprecated APIs, secure headers</span></span></th>
+                <th class="px-3 py-3 text-center"><span class="tip">SEO<span class="tip-icon">?</span><span class="tip-box">Search engine optimisation — meta tags, crawlability</span></span></th>
+                <th class="px-3 py-3 text-center"><span class="tip">Design<span class="tip-icon">?</span><span class="tip-box">Visual design quality — layout, fonts, responsiveness</span></span></th>
+                <th class="px-3 py-3 text-center"><span class="tip">Score<span class="tip-icon">?</span><span class="tip-box">Weighted overall score (lower = worse website)</span></span></th>
+                <th class="px-3 py-3 rounded-tr-xl">Website</th>
+              </tr>
+            </thead>
+            <tbody id="liveTableBody"></tbody>
+          </table>
+        </div>`;
+    }
+
     // ── Form submit ──────────────────────────────────────────────────────────
-    document.getElementById('searchForm').addEventListener('submit', async e => {
+    let activeStream = null;
+
+    document.getElementById('searchForm').addEventListener('submit', e => {
       e.preventDefault();
 
-      const location = document.getElementById('location').value.trim();
-      const industry = document.getElementById('industry').value;
-      const limit    = document.getElementById('limit').value || '25';
-      const btn      = document.getElementById('submitBtn');
-      const statusEl = document.getElementById('status');
-      const resultsEl= document.getElementById('results');
+      // Close any in-progress stream
+      if (activeStream) { activeStream.close(); activeStream = null; }
+
+      const location  = document.getElementById('location').value.trim();
+      const industry  = document.getElementById('industry').value;
+      const limit     = document.getElementById('limit').value || '25';
+      const btn       = document.getElementById('submitBtn');
+      const statusEl  = document.getElementById('status');
+      const resultsEl = document.getElementById('results');
 
       const params = new URLSearchParams({ limit });
       if (location) params.set('location', location);
-      if (industry) params.set('industry', industry);
+      if (industry)  params.set('industry', industry);
 
-      // Clear cached results and show loading state
+      // Clear cache and enter loading state
       clearStorage();
       btn.disabled = true;
       resultsEl.classList.add('hidden');
+      resultsEl.innerHTML = '';
       statusEl.classList.remove('hidden');
+      statusEl.className = 'flex items-center gap-3 text-sm text-slate-400 mb-6';
 
       const timerEl = document.createElement('span');
+      const msgEl   = document.createElement('span');
+      msgEl.textContent = 'Finding businesses\u2026';
       statusEl.innerHTML = '';
-      statusEl.className = 'flex items-center gap-3 text-sm text-slate-400 mb-6';
       statusEl.appendChild(Object.assign(document.createElement('span'), { className: 'spinner' }));
-      statusEl.appendChild(document.createTextNode('Scanning websites\u2026 '));
+      statusEl.appendChild(msgEl);
       statusEl.appendChild(timerEl);
       startTimer(timerEl);
 
-      try {
-        const res  = await fetch(`/api/search?${params}`);
-        const data = await res.json();
+      let liveCount = 0;
 
+      const es = new EventSource(`/api/search?${params}`);
+      activeStream = es;
+
+      es.addEventListener('status', e => {
+        const { message } = JSON.parse(e.data);
+        msgEl.textContent = message;
+      });
+
+      es.addEventListener('meta', e => {
+        const { location: loc, total } = JSON.parse(e.data);
+        msgEl.textContent = `Scoring websites\u2026 `;
+        resultsEl.classList.remove('hidden');
+        resultsEl.className = 'fade-up';
+        resultsEl.innerHTML = buildLiveShell(loc, total);
+      });
+
+      es.addEventListener('result', e => {
+        const result = JSON.parse(e.data);
+        liveCount++;
+        const countEl = document.getElementById('liveCount');
+        if (countEl) countEl.textContent = liveCount;
+        const tbody = document.getElementById('liveTableBody');
+        if (tbody) tbody.insertAdjacentHTML('beforeend', buildLiveRow(result, liveCount));
+      });
+
+      es.addEventListener('done', e => {
+        es.close();
+        activeStream = null;
         stopTimer();
-
-        if (!res.ok) {
-          statusEl.innerHTML = `<span class="text-red-400 text-sm">⚠ ${esc(data.error ?? 'Request failed')}</span>`;
-          return;
-        }
-
+        const data = JSON.parse(e.data);
         statusEl.classList.add('hidden');
         saveToStorage(data);
         showResults(data);
-      } catch (err) {
-        stopTimer();
-        statusEl.innerHTML = `<span class="text-red-400 text-sm">⚠ ${esc(err.message)}</span>`;
-      } finally {
         btn.disabled = false;
-      }
+      });
+
+      es.addEventListener('apierror', e => {
+        es.close();
+        activeStream = null;
+        stopTimer();
+        const { error } = JSON.parse(e.data);
+        statusEl.innerHTML = `<span class="text-red-400 text-sm">⚠ ${esc(error)}</span>`;
+        btn.disabled = false;
+      });
+
+      es.onerror = () => {
+        if (es.readyState === EventSource.CLOSED) return;
+        es.close();
+        activeStream = null;
+        stopTimer();
+        statusEl.innerHTML = `<span class="text-red-400 text-sm">⚠ Connection lost</span>`;
+        btn.disabled = false;
+      };
     });
   </script>
 

@@ -202,7 +202,7 @@ async function placeDetails(placeId, apiKey) {
   return data.result ?? null;
 }
 
-async function findBusinessesGoogle(location, industries, targetCount, apiKey) {
+async function findBusinessesGoogle(location, industries, targetCount, apiKey, onProgress = null) {
   const seen = new Map();
   const maxPerIndustry = Math.max(5, Math.ceil(targetCount / industries.length));
 
@@ -210,6 +210,7 @@ async function findBusinessesGoogle(location, industries, targetCount, apiKey) {
     if (seen.size >= targetCount) break;
     const query = `${industry} in ${location}`;
     process.stdout.write(`  ${truncate(query, 55).padEnd(55)} `);
+    if (onProgress) onProgress({ phase: 'discovery', industry, total: seen.size });
 
     let found = 0, pageToken = null, page = 0;
 
@@ -279,7 +280,7 @@ async function overpassQuery(tagPairs, lat, lon, radiusM) {
   return res.json();
 }
 
-async function findBusinessesOSM(location, industries, targetCount) {
+async function findBusinessesOSM(location, industries, targetCount, onProgress = null) {
   log('\n  Geocoding location via Nominatim...');
   const { lat, lon } = await geocode(location);
   log(`  Geocoded to: ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
@@ -292,6 +293,7 @@ async function findBusinessesOSM(location, industries, targetCount) {
     if (!tags) continue;
 
     process.stdout.write(`  ${industry.padEnd(30)} `);
+    if (onProgress) onProgress({ phase: 'discovery', industry, total: seen.size });
 
     try {
       const data = await overpassQuery(tags, lat, lon, 20_000); // 20 km radius
@@ -322,14 +324,14 @@ async function findBusinessesOSM(location, industries, targetCount) {
 }
 
 // Unified discovery with automatic fallback
-async function findBusinesses(location, industries, targetCount, googleApiKey) {
+async function findBusinesses(location, industries, targetCount, googleApiKey, onProgress = null) {
   log(`\nDiscovering businesses in: ${location}`);
   log(`Industries: ${industries.length === ALL_INDUSTRIES.length ? `all (${ALL_INDUSTRIES.length})` : industries.join(', ')}`);
 
   if (googleApiKey) {
     log('\n[Discovery] Trying Google Places API...');
     try {
-      const results = await findBusinessesGoogle(location, industries, targetCount, googleApiKey);
+      const results = await findBusinessesGoogle(location, industries, targetCount, googleApiKey, onProgress);
       if (results.length > 0) {
         log(`\n[Discovery] Google Places: found ${results.length} businesses.`);
         return results;
@@ -344,7 +346,7 @@ async function findBusinesses(location, industries, targetCount, googleApiKey) {
   }
 
   log('[Discovery] Querying OpenStreetMap / Overpass...');
-  const results = await findBusinessesOSM(location, industries, targetCount);
+  const results = await findBusinessesOSM(location, industries, targetCount, onProgress);
   log(`\n[Discovery] OpenStreetMap: found ${results.length} businesses.`);
   return results;
 }
@@ -667,7 +669,7 @@ async function scorePuppeteer(url, browser, anthropicKey = null) {
 
 // ─── Unified scoring with fallback ───────────────────────────────────────────
 
-async function scoreAll(businesses, psiApiKey, anthropicKey, limit) {
+async function scoreAll(businesses, psiApiKey, anthropicKey, limit, onResult = null) {
   let usePSI       = !!psiApiKey;
   let psiKeyBad    = false;
   let browser      = null;
@@ -727,6 +729,7 @@ async function scoreAll(businesses, psiApiKey, anthropicKey, limit) {
 
       process.stdout.write(`${String(scores.overall).padStart(3)}/100  [${scores.method}]\n`);
       results.push({ ...biz, scores });
+      if (onResult) onResult({ ...biz, scores });
     }
   } finally {
     if (browser) await browser.close();

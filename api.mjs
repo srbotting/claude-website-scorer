@@ -75,15 +75,15 @@ function handleIndustries(res) {
   res.end(JSON.stringify(ALL_INDUSTRIES));
 }
 
-// ─── GET /api/search ──────────────────────────────────────────────────────────
+// ─── GET /api/search (SSE stream) ────────────────────────────────────────────
 
 async function handleSearch(res, url) {
   const locationParam = url.searchParams.get('location')?.trim() || null;
   const industryParam = url.searchParams.get('industry')?.trim() || null;
   const limit         = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '25', 10)));
 
-  const googleApiKey = process.env.GOOGLE_API_KEY  || null;
-  const psiApiKey    = process.env.PSI_API_KEY      || googleApiKey || null;
+  const googleApiKey = process.env.GOOGLE_API_KEY   || null;
+  const psiApiKey    = process.env.PSI_API_KEY       || googleApiKey || null;
   const anthropicKey = process.env.ANTHROPIC_API_KEY || null;
   const industries   = industryParam ? [industryParam] : ALL_INDUSTRIES;
 
@@ -93,25 +93,51 @@ async function handleSearch(res, url) {
     catch { location = 'New York, USA'; }
   }
 
+  res.writeHead(200, {
+    'Content-Type':                'text/event-stream',
+    'Cache-Control':               'no-cache',
+    'Connection':                  'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.flushHeaders();
+  res.socket?.setNoDelay(true);
+
+  const send = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
   try {
+    send('status', { message: `Detecting location…` });
+
     const collectTarget = Math.min(limit * 3, 300);
-    const businesses    = await findBusinesses(location, industries, collectTarget, googleApiKey);
+    send('status', { message: `Searching for businesses in ${location}…` });
+
+    const businesses = await findBusinesses(location, industries, collectTarget, googleApiKey, ({ industry, total }) => {
+      send('status', { message: `Searching ${industry}… (${total} found so far)` });
+    });
 
     if (businesses.length === 0) {
-      return jsonError(res, 404, `No businesses with websites found for "${location}". Try a different location or industry.`);
+      send('apierror', { error: `No businesses with websites found for "${location}". Try a different location or industry.` });
+      return res.end();
     }
 
-    const results = await scoreAll(businesses, psiApiKey, anthropicKey, limit);
+    send('meta', { location, total: businesses.length });
 
-    res.writeHead(200, JSON_HEADERS);
-    res.end(JSON.stringify({
+    const results = await scoreAll(businesses, psiApiKey, anthropicKey, limit, result => {
+      send('result', result);
+    });
+
+
+    send('done', {
       location,
       generatedAt: new Date().toISOString(),
       total: results.length,
       results,
-    }));
+    });
   } catch (e) {
     console.error('[API] Search error:', e.message);
-    jsonError(res, 500, e.message);
+    send('apierror', { error: e.message });
   }
+
+  res.end();
 }
