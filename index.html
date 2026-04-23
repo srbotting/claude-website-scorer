@@ -164,8 +164,60 @@
       z-index: 2;
       overflow: visible;
     }
-    .results-table tr:hover td { background: rgba(0,224,198,0.04); }
+    .results-table tr.result-row { cursor: pointer; }
+    .results-table tr.result-row:hover td { background: rgba(0,224,198,0.04); }
     .results-table td { border-bottom: 1px solid #1a2d44; }
+    .results-table tr.detail-row td { border-bottom: 1px solid #1a2d44; padding: 0; }
+    .results-table tr.detail-row.hidden { display: none; }
+
+    /* Expand chevron */
+    .expand-chevron {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 1px solid #1a2d44;
+      border-radius: 3px;
+      color: #3d5470;
+      font-size: 9px;
+      line-height: 12px;
+      text-align: center;
+      margin-right: 6px;
+      flex-shrink: 0;
+      transition: color 120ms ease, border-color 120ms ease, transform 120ms ease;
+      vertical-align: middle;
+    }
+    .result-row:hover .expand-chevron { color: #7b9ab8; border-color: #3d5470; }
+    .result-row.expanded .expand-chevron { transform: rotate(90deg); color: #00e0c6; border-color: #00e0c6; }
+
+    /* Detail panel */
+    .detail-panel {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      padding: 16px 20px;
+      background: #07101f;
+    }
+    .detail-section h4 {
+      font-size: 0.65rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #7b9ab8;
+      margin-bottom: 8px;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .detail-check {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-size: 0.72rem;
+      color: #7b9ab8;
+      line-height: 1.8;
+    }
+    .detail-check .ck-pass { color: #22c98a; font-size: 0.65rem; }
+    .detail-check .ck-fail { color: #ff5555; font-size: 0.65rem; }
+    .detail-check .ck-warn { color: #ff9933; font-size: 0.65rem; }
+    .detail-check .ck-label { color: #c8d8e8; }
+    .detail-check .ck-note { color: #3d5470; font-size: 0.68rem; }
 
     /* Tooltip */
     .tip {
@@ -384,6 +436,123 @@
       timerInterval = null;
     }
 
+    // ── Detail checks panel ──────────────────────────────────────────────────
+    function renderChecks(checks) {
+      if (!checks) return '<p class="text-slate-500 text-sm p-4">Detailed checks not available — scored via PageSpeed Insights.</p>';
+      const reasons = { nav_failed: 'Page failed to load or timed out.', eval_failed: 'Page loaded but could not be evaluated.', parked: 'Parked domain or placeholder — too little content to analyse.' };
+      if (checks._reason) return `<p class="text-slate-500 text-sm p-4">${reasons[checks._reason] || 'No detail available.'} Load time: ${(checks.loadMs/1000).toFixed(1)}s</p>`;
+
+      const ck = (pass, label, note = '') => `
+        <div class="detail-check">
+          <span class="${pass ? 'ck-pass' : 'ck-fail'}">${pass ? '✓' : '✗'}</span>
+          <span class="ck-label">${label}</span>
+          ${note ? `<span class="ck-note">${esc(String(note))}</span>` : ''}
+        </div>`;
+
+      const p = checks.performance;
+      const a = checks.accessibility;
+      const b = checks.bestPractices;
+      const s = checks.seo;
+      const d = checks.design;
+      const loadCls = p.loadMs < 1500 ? 'ck-pass' : p.loadMs < 5000 ? 'ck-warn' : 'ck-fail';
+
+      return `
+        <div class="detail-panel">
+          <div class="detail-section">
+            <h4>Performance</h4>
+            <div class="detail-check">
+              <span class="${loadCls}">●</span>
+              <span class="ck-label">Load time</span>
+              <span class="ck-note">${(p.loadMs / 1000).toFixed(1)}s</span>
+            </div>
+          </div>
+
+          <div class="detail-section">
+            <h4>Accessibility</h4>
+            ${ck(a.hasLang,    'HTML lang attribute')}
+            ${ck(a.hasViewport,'Viewport meta tag')}
+            ${ck(a.hasH1,      'H1 heading present')}
+            ${ck(a.noMarquee,  'No marquee / blink')}
+            ${a.imgCount   > 0 ? ck(a.imgsWithAlt  === a.imgCount,   'Image alt text',  `${a.imgsWithAlt}/${a.imgCount}`) : ''}
+            ${a.inputCount > 0 ? ck(a.labeledInputs === a.inputCount, 'Input labels',    `${a.labeledInputs}/${a.inputCount}`) : ''}
+          </div>
+
+          <div class="detail-section">
+            <h4>Best Practices</h4>
+            ${ck(b.isHttps,         'HTTPS')}
+            ${ck(b.hasDoctype,      'DOCTYPE declared')}
+            ${ck(b.hasFavicon,      'Favicon present')}
+            ${ck(b.jsErrors === 0,  'No JS errors',         b.jsErrors > 0 ? `${b.jsErrors} error${b.jsErrors > 1 ? 's' : ''}` : '')}
+            ${ck(!b.hasFrames,      'No frames/framesets')}
+            ${ck(!b.hasMarquee,     'No marquee / blink')}
+            ${ck(b.fontTags   === 0,'No &lt;font&gt; tags',  b.fontTags   > 0 ? `${b.fontTags} found`   : '')}
+            ${ck(b.centerTags === 0,'No &lt;center&gt; tags',b.centerTags > 0 ? `${b.centerTags} found` : '')}
+          </div>
+
+          <div class="detail-section">
+            <h4>SEO</h4>
+            ${ck(s.hasTitle,                  'Title tag',              s.hasTitle    ? `${s.titleLen} chars`    : '')}
+            ${ck(s.hasMetaDesc,               'Meta description',       s.hasMetaDesc ? `${s.metaDescLen} chars` : '')}
+            ${ck(s.hasViewport,               'Viewport meta')}
+            ${ck(s.h1Count === 1,             'Single H1',              s.h1Count !== 1 ? `${s.h1Count} found` : '')}
+            ${ck(s.hasCanonical,              'Canonical URL')}
+            ${ck(s.hasOgTitle && s.hasOgDesc && s.hasOgImage, 'Open Graph tags')}
+            ${ck(s.hasJsonLd,                 'JSON-LD schema')}
+            ${ck(s.hasSitemap,                'sitemap.xml')}
+            ${ck(s.robotsOk,                  'robots.txt (crawlable)')}
+            ${ck(s.headingHierarchyOk,        'Heading hierarchy')}
+            ${ck(s.wordCount >= 300,          'Content depth',          `${s.wordCount} words`)}
+            ${ck(!s.isNoIndex,                'Not noindex')}
+          </div>
+
+          <div class="detail-section">
+            <h4>Design</h4>
+            ${ck(d.hasFlexbox || d.hasGrid, 'Modern layout', d.hasGrid ? 'CSS Grid' : d.hasFlexbox ? 'Flexbox' : '')}
+            ${ck(d.hasMediaQueries,  'Responsive (media queries)')}
+            ${ck(d.hasWebFonts,      'Web fonts')}
+            ${ck(d.hasCSSVars,       'CSS custom properties')}
+            ${ck(d.hasBorderRadius,  'Rounded corners')}
+            ${ck(d.hasTransitions,   'CSS transitions')}
+            ${ck(!d.hasFrames,       'No frames')}
+            ${ck(!d.isLegacyFont,    'No legacy fonts')}
+            ${ck(!d.hasFixedWidth,   'No fixed-width body')}
+            ${d.fontTags   > 0 ? ck(false, 'No &lt;font&gt; tags',   `${d.fontTags} found`)   : ''}
+            ${d.centerTags > 2 ? ck(false, 'No excessive &lt;center&gt;', `${d.centerTags} found`) : ''}
+          </div>
+        </div>`;
+    }
+
+    // ── Result row pair (main row + collapsible detail row) ──────────────────
+    function resultRowPair(r, rank) {
+      const s = r.scores;
+      const rowId = `dr-${rank}-${Math.random().toString(36).slice(2, 7)}`;
+      return `
+        <tr class="result-row" data-detail="${rowId}">
+          <td class="px-3 py-3 text-slate-500 text-sm font-display">
+            <span class="expand-chevron">›</span>${rank}
+          </td>
+          <td class="px-3 py-3">
+            <div class="font-display font-medium text-white text-sm leading-tight">${esc(r.name)}</div>
+            <div class="text-xs text-slate-600 mt-0.5">${esc(r.address || '')}</div>
+          </td>
+          <td class="px-3 py-3 text-xs text-slate-400 capitalize">${esc(r.industry)}</td>
+          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.performance)}</td>
+          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.accessibility)}</td>
+          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.bestPractices)}</td>
+          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.seo)}</td>
+          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.design)}</td>
+          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.overall, true)}</td>
+          <td class="px-3 py-3 text-xs text-slate-500 max-w-[220px] truncate">
+            <a href="${esc(r.website)}" target="_blank" rel="noopener noreferrer"
+               class="text-brand hover:underline transition-opacity hover:opacity-80"
+               style="word-break:break-all">${esc(r.website)}</a>
+          </td>
+        </tr>
+        <tr class="detail-row hidden" id="${rowId}">
+          <td colspan="10">${renderChecks(s.checks)}</td>
+        </tr>`;
+    }
+
     // ── Render results table ─────────────────────────────────────────────────
     function renderResults(data) {
       const { location, generatedAt, results } = data;
@@ -395,32 +564,7 @@
       const hasPuppeteer = results.some(r => r.scores.method === 'puppeteer');
       const designIsHeuristic = results.some(r => r.scores.designMethod === 'heuristic');
 
-      const rows = results.map((r, i) => {
-        const s = r.scores;
-        const design = s.design != null
-          ? `${s.design}${s.designMethod === 'vision' ? '<span class="text-brand text-xs ml-0.5">✓</span>' : ''}`
-          : '—';
-        return `
-          <tr>
-            <td class="px-3 py-3 text-slate-500 text-sm font-display">${i + 1}</td>
-            <td class="px-3 py-3">
-              <div class="font-display font-medium text-white text-sm leading-tight">${esc(r.name)}</div>
-              <div class="text-xs text-slate-600 mt-0.5">${esc(r.address || '')}</div>
-            </td>
-            <td class="px-3 py-3 text-xs text-slate-400 capitalize">${esc(r.industry)}</td>
-            <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.performance)}</td>
-            <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.accessibility)}</td>
-            <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.bestPractices)}</td>
-            <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.seo)}</td>
-            <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.design)}</td>
-            <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.overall, true)}</td>
-            <td class="px-3 py-3 text-xs text-slate-500 max-w-[220px] truncate">
-              <a href="${esc(r.website)}" target="_blank" rel="noopener noreferrer"
-                 class="text-brand hover:underline transition-opacity hover:opacity-80"
-                 style="word-break:break-all">${esc(r.website)}</a>
-            </td>
-          </tr>`;
-      }).join('');
+      const rows = results.map((r, i) => resultRowPair(r, i + 1)).join('');
 
       const notes = [];
       if (hasPuppeteer)       notes.push('Technical scores use load-time + HTML heuristics (not full Lighthouse).');
@@ -495,37 +639,21 @@
 
     // ── Live table helpers ───────────────────────────────────────────────────
     function buildLiveRow(r, i) {
-      const s = r.scores;
-      return `
-        <tr>
-          <td class="px-3 py-3 text-slate-500 text-sm font-display">${i}</td>
-          <td class="px-3 py-3">
-            <div class="font-display font-medium text-white text-sm leading-tight">${esc(r.name)}</div>
-            <div class="text-xs text-slate-600 mt-0.5">${esc(r.address || '')}</div>
-          </td>
-          <td class="px-3 py-3 text-xs text-slate-400 capitalize">${esc(r.industry)}</td>
-          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.performance)}</td>
-          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.accessibility)}</td>
-          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.bestPractices)}</td>
-          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.seo)}</td>
-          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.design)}</td>
-          <td class="px-3 py-3 text-sm text-center">${scoreBadge(s.overall, true)}</td>
-          <td class="px-3 py-3 text-xs text-slate-500 max-w-[220px] truncate">
-            <a href="${esc(r.website)}" target="_blank" rel="noopener noreferrer"
-               class="text-brand hover:underline transition-opacity hover:opacity-80"
-               style="word-break:break-all">${esc(r.website)}</a>
-          </td>
-        </tr>`;
+      return resultRowPair(r, i);
     }
 
-    function buildLiveShell(location, total) {
+    function buildLiveShell(location, total, limit) {
+      const displayTotal = Math.min(total, limit);
+      const hint = total > limit
+        ? `Scoring ${total} sites to find the worst ${limit}`
+        : `Results appear as each site is scored`;
       return `
         <div class="flex items-baseline justify-between gap-4 mb-4 flex-wrap">
           <h2 class="text-lg font-display font-semibold text-white">
-            <span id="liveCount">0</span> of ${total} scored
+            <span id="liveCount">0</span> of ${displayTotal} results
             <span class="text-slate-500 font-normal">· ${esc(location)}</span>
           </h2>
-          <span class="text-xs text-brand opacity-70">Results appear as each site is scored</span>
+          <span class="text-xs text-brand opacity-70">${hint}</span>
         </div>
         <div class="overflow-x-auto overflow-y-visible rounded-xl border border-surface-border card-shadow">
           <table class="results-table w-full text-left border-collapse text-sm">
@@ -586,6 +714,7 @@
       startTimer(timerEl);
 
       let liveCount = 0;
+      let liveLimit = parseInt(limit, 10) || 25;
 
       const es = new EventSource(`/api/search?${params}`);
       activeStream = es;
@@ -596,20 +725,23 @@
       });
 
       es.addEventListener('meta', e => {
-        const { location: loc, total } = JSON.parse(e.data);
+        const { location: loc, total, limit: lim } = JSON.parse(e.data);
+        liveLimit = lim || liveLimit;
         msgEl.textContent = `Scoring websites\u2026 `;
         resultsEl.classList.remove('hidden');
         resultsEl.className = 'fade-up';
-        resultsEl.innerHTML = buildLiveShell(loc, total);
+        resultsEl.innerHTML = buildLiveShell(loc, total, liveLimit);
       });
 
       es.addEventListener('result', e => {
-        const result = JSON.parse(e.data);
         liveCount++;
         const countEl = document.getElementById('liveCount');
-        if (countEl) countEl.textContent = liveCount;
-        const tbody = document.getElementById('liveTableBody');
-        if (tbody) tbody.insertAdjacentHTML('beforeend', buildLiveRow(result, liveCount));
+        if (countEl) countEl.textContent = Math.min(liveCount, liveLimit);
+        if (liveCount <= liveLimit) {
+          const result = JSON.parse(e.data);
+          const tbody = document.getElementById('liveTableBody');
+          if (tbody) tbody.insertAdjacentHTML('beforeend', buildLiveRow(result, liveCount));
+        }
       });
 
       es.addEventListener('done', e => {
@@ -640,6 +772,19 @@
         statusEl.innerHTML = `<span class="text-red-400 text-sm">⚠ Connection lost</span>`;
         btn.disabled = false;
       };
+    });
+
+    // ── Expand / collapse detail rows ────────────────────────────────────────
+    document.addEventListener('click', e => {
+      if (e.target.closest('a')) return; // let link clicks pass through
+      const row = e.target.closest('tr.result-row');
+      if (!row) return;
+      const detailId = row.dataset.detail;
+      const detailRow = detailId ? document.getElementById(detailId) : null;
+      if (!detailRow) return;
+      const isOpen = !detailRow.classList.contains('hidden');
+      detailRow.classList.toggle('hidden', isOpen);
+      row.classList.toggle('expanded', !isOpen);
     });
   </script>
 

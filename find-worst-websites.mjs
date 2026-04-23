@@ -464,21 +464,22 @@ async function scorePuppeteer(url, browser, anthropicKey = null) {
   let navOk = false;
   const t0 = Date.now();
   try {
-    const res   = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+    const res   = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 12_000 });
     const status = res?.status() ?? 0;
-    // Treat HTTP error responses as failed — prevents scoring Google/Cloudflare error pages
     navOk = status === 0 || (status >= 200 && status < 400);
   } catch { /* timed out or failed */ }
   const loadMs = Date.now() - t0;
 
   if (!navOk) {
     await page.close();
-    return { performance: 0, accessibility: 0, bestPractices: 0, seo: 0, design: 0, overall: 0, method: 'puppeteer', designMethod: 'heuristic' };
+    return { performance: 0, accessibility: 0, bestPractices: 0, seo: 0, design: 0, overall: 0, method: 'puppeteer', designMethod: 'heuristic', checks: { _reason: 'nav_failed', loadMs } };
   }
 
   let audit, screenshotB64 = null;
   try {
-    audit = await page.evaluate(() => {
+    const evalTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('evaluate timeout')), 8_000));
+    audit = await Promise.race([
+      page.evaluate(() => {
       const imgs    = [...document.querySelectorAll('img')];
       const inputs  = [...document.querySelectorAll('input:not([type=hidden]), select, textarea')];
       const labeled = inputs.filter(el => (el.id && document.querySelector(`label[for="${el.id}"]`)) || el.closest('label')).length;
@@ -551,28 +552,28 @@ async function scorePuppeteer(url, browser, anthropicKey = null) {
           })(),
         },
       };
-    });
+    }), evalTimeout]);
 
     if (anthropicKey && anthropicKeyValid) {
       screenshotB64 = (await page.screenshot({ type: 'jpeg', quality: 55 })).toString('base64');
     }
   } catch {
     await page.close();
-    return { performance: 5, accessibility: 5, bestPractices: 5, seo: 5, design: 5, overall: 5, method: 'puppeteer', designMethod: 'heuristic' };
+    return { performance: 5, accessibility: 5, bestPractices: 5, seo: 5, design: 5, overall: 5, method: 'puppeteer', designMethod: 'heuristic', checks: { _reason: 'eval_failed', loadMs } };
   }
 
   await page.close();
 
   // Parked domains, "coming soon" pages, and soft 404s have almost no real content
   if (audit.wordCount < 30) {
-    return { performance: 0, accessibility: 0, bestPractices: 0, seo: 0, design: 0, overall: 0, method: 'puppeteer', designMethod: 'heuristic' };
+    return { performance: 0, accessibility: 0, bestPractices: 0, seo: 0, design: 0, overall: 0, method: 'puppeteer', designMethod: 'heuristic', checks: { _reason: 'parked', loadMs } };
   }
 
   // Fetch sitemap.xml and robots.txt in parallel — short timeout, failures = absent
   const origin = (() => { try { return new URL(url).origin; } catch { return null; } })();
   let hasSitemap = false, robotsOk = true;
   if (origin) {
-    const quickFetch = (u) => fetch(u, { signal: AbortSignal.timeout(5_000) }).then(r => r.ok ? r.text() : null).catch(() => null);
+    const quickFetch = (u) => fetch(u, { signal: AbortSignal.timeout(3_000) }).then(r => r.ok ? r.text() : null).catch(() => null);
     const [sitemapText, robotsText] = await Promise.all([
       quickFetch(`${origin}/sitemap.xml`),
       quickFetch(`${origin}/robots.txt`),
@@ -664,7 +665,66 @@ async function scorePuppeteer(url, browser, anthropicKey = null) {
   }
 
   const overall = Math.round((perf + a11y + bp + seo + design) / 5);
-  return { performance: perf, accessibility: a11y, bestPractices: bp, seo, design, overall, method: 'puppeteer', designMethod };
+  return {
+    performance: perf, accessibility: a11y, bestPractices: bp, seo, design, overall,
+    method: 'puppeteer', designMethod,
+    checks: {
+      performance: { loadMs },
+      accessibility: {
+        hasLang:        audit.hasLang,
+        hasViewport:    audit.hasViewport,
+        hasH1:          audit.hasH1,
+        noMarquee:      !audit.design.hasMarquee,
+        imgCount:       audit.imgCount,
+        imgsWithAlt:    audit.imgsWithAlt,
+        inputCount:     audit.inputCount,
+        labeledInputs:  audit.labeledInputs,
+      },
+      bestPractices: {
+        isHttps,
+        hasDoctype:   audit.hasDoctype,
+        hasFavicon:   audit.hasFavicon,
+        jsErrors:     jsErrors.length,
+        hasFrames:    audit.design.hasFrames,
+        hasMarquee:   audit.design.hasMarquee,
+        fontTags:     audit.design.fontTags,
+        centerTags:   audit.design.centerTags,
+      },
+      seo: {
+        hasTitle:             audit.hasTitle,
+        titleLen:             audit.titleLen,
+        hasMetaDesc:          audit.hasMetaDesc,
+        metaDescLen:          audit.metaDescLen,
+        hasViewport:          audit.hasViewport,
+        h1Count:              audit.h1Count,
+        hasCanonical:         audit.hasCanonical,
+        hasOgTitle:           audit.hasOgTitle,
+        hasOgDesc:            audit.hasOgDesc,
+        hasOgImage:           audit.hasOgImage,
+        hasJsonLd:            audit.hasJsonLd,
+        hasSitemap,
+        robotsOk,
+        wordCount:            audit.wordCount,
+        headingHierarchyOk:   audit.headingHierarchyOk,
+      },
+      design: {
+        hasFlexbox:    audit.design.hasFlexbox,
+        hasGrid:       audit.design.hasGrid,
+        hasMediaQueries: audit.design.hasMediaQueries,
+        hasWebFonts:   audit.design.hasWebFonts,
+        hasCSSVars:    audit.design.hasCSSVars,
+        hasBorderRadius: audit.design.hasBorderRadius,
+        hasTransitions: audit.design.hasTransitions,
+        hasFrames:     audit.design.hasFrames,
+        hasMarquee:    audit.design.hasMarquee,
+        fontTags:      audit.design.fontTags,
+        centerTags:    audit.design.centerTags,
+        legacyTables:  audit.design.legacyTables,
+        isLegacyFont:  audit.design.isLegacyFont,
+        hasFixedWidth: audit.design.hasFixedWidth,
+      },
+    },
+  };
 }
 
 // ─── Unified scoring with fallback ───────────────────────────────────────────
@@ -705,6 +765,7 @@ async function scoreAll(businesses, psiApiKey, anthropicKey, limit, onResult = n
     for (let i = 0; i < businesses.length; i++) {
       const biz = businesses[i];
       const label = truncate(biz.website, 58).padEnd(58);
+      const tSite = Date.now();
       process.stdout.write(`  [${String(i + 1).padStart(String(businesses.length).length)}/${businesses.length}] ${label} `);
 
       let scores = null;
@@ -733,16 +794,20 @@ async function scoreAll(businesses, psiApiKey, anthropicKey, limit, onResult = n
         continue;
       }
 
-      process.stdout.write(`${String(scores.overall).padStart(3)}/100  [${scores.method}]\n`);
+      const elapsed = ((Date.now() - tSite) / 1000).toFixed(1);
+      process.stdout.write(`${String(scores.overall).padStart(3)}/100  [${scores.method}]  ${elapsed}s\n`);
       results.push({ ...biz, scores });
       if (onResult) onResult({ ...biz, scores });
+      if (results.length >= limit) { log(`[scoreAll] limit ${limit} reached — stopping`); break; }
     }
   } finally {
-    if (browser) await browser.close();
+    log('[scoreAll] loop done — closing browser (background)');
+    if (browser) browser.close().catch(() => {});
+    log('[scoreAll] returning results');
   }
 
   results.sort((a, b) => a.scores.overall - b.scores.overall);
-  return results.slice(0, limit);
+  return results;
 }
 
 // ─── Output ───────────────────────────────────────────────────────────────────

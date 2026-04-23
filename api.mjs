@@ -109,31 +109,34 @@ async function handleSearch(res, url) {
   try {
     send('status', { message: `Detecting location…` });
 
-    const collectTarget = Math.min(limit * 3, 300);
+    const collectTarget = limit;
     send('status', { message: `Searching for businesses in ${location}…` });
 
-    const businesses = await findBusinesses(location, industries, collectTarget, googleApiKey, ({ industry, total }) => {
+    const allBusinesses = await findBusinesses(location, industries, collectTarget, googleApiKey, ({ industry, total }) => {
       send('status', { message: `Searching ${industry}… (${total} found so far)` });
     });
+    const businesses = allBusinesses.slice(0, limit);
 
     if (businesses.length === 0) {
       send('apierror', { error: `No businesses with websites found for "${location}". Try a different location or industry.` });
       return res.end();
     }
 
-    send('meta', { location, total: businesses.length });
+    send('meta', { location, total: businesses.length, limit });
 
     const results = await scoreAll(businesses, psiApiKey, anthropicKey, limit, result => {
       send('result', result);
     });
 
 
+    console.log(`[api] scoreAll returned ${results.length} results — sending done`);
     send('done', {
       location,
       generatedAt: new Date().toISOString(),
       total: results.length,
       results,
     });
+    console.log('[api] done sent');
   } catch (e) {
     console.error('[API] Search error:', e.message);
     send('apierror', { error: e.message });
